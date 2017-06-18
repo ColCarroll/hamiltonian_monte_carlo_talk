@@ -1,0 +1,673 @@
+<html>
+<head>
+<title>Hamiltonian Monte Carlo in PyMC3</title>
+<meta charset="utf-8" />
+<style>
+
+  td {
+    vertical-align: top;
+    padding: 20px;
+  }
+  #main {
+    text-align:left;
+    width:850px;
+    margin:auto;
+    font-family: Tahoma, Geneva, sans-serif;
+  }
+  code {
+    background-color:#EEEEEE;
+    font-family:Consolas,Monaco,Lucida Console,Liberation Mono,DejaVu Sans Mono,Bitstream Vera Sans Mono,Courier New;
+  }
+  em {
+    font-family: "Times New Roman", Times, serif;
+  }
+  img {
+    border:4px solid #196786;
+    width:300;
+    height:225;
+  }
+  .logo {
+    border: none;
+    width: auto;
+    height: 4em;
+  }
+  a.toc {
+    text-decoration:none;
+    color: inherit;
+  }
+  hr {
+    border:2px solid #196786;
+  }
+
+</style>
+</head>
+
+<body>
+<div id="main">
+
+<div style="display: inline-block">
+  <img src="images/PyMC3.png" class=logo style="float: left"></img>
+  <h1 style="float: right;">Hamiltonian Monte Carlo in PyMC<span style="color: #196786">3</span></h1>
+</div>
+
+<p>These are the slides and lightly edited, modestly annotated speaker notes from a talk given at the <a href="https://www.meetup.com/Boston-Bayesians/events/240254660/">Boston Bayesians meetup</a> on June 15, 2017. Apologies to <a href="http://idlewords.com/talks/">Maciej Cegłowski</a> for ripping off the formatting of this essay.
+
+<p>There are a number of code snippets, figures, and demos that are in the talk.  They are available to view in <a href="https://github.com/ColCarroll/hamiltonian_monte_carlo_talk/blob/master/demos.ipynb">the github repo</a>. If you would like to run the code, you should have <a href="http://jupyter.org/"><code>jupyter</code></a> installed, and run:
+  <ol>
+    <li><code>git clone git@github.com:ColCarroll/hamiltonian_monte_carlo_talk.git</code></li>
+    <li><code>cd hamiltonian_monte_carlo_talk</code></li>
+    <li><code>pip install -r requirements.txt</code></li>
+    <li><code>jupyter notebook</code></li>
+  </ol>
+
+<p>The code was run using Python 3.6.1, but will probably work with any version.
+
+
+<hr/>
+
+<table cellspacing=10>
+
+<tr>
+  <td>
+  </td>
+  <td>
+    <ol>
+      <li><a href="#regression">Bayesian Linear Regression</a></li>
+      <li><a href="#calculus">Sampling with Calculus</a></li>
+      <li><a href="#rejection">Rejection Sampling</a></li>
+      <li><a href="#metropolis">Metropolis-Hastings Sampling</a></li>
+      <li><a href="#hamiltonian">Hamiltonian Monte Carlo</a></li>
+      <li><a href="#references">References</a></li>
+    </ol>
+  </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.001.png">
+        <img src="images/thumbs/bayes_talk.001.png">
+      </a>
+    </td>
+
+    <td>
+      <p>Thank you all for coming.  I am <a href="http://colindcarroll.com/">Colin Carroll</a>.  I am currently a software engineer doing natural language processing at <a href="http://kensho.com/">Kensho</a>, where we <a href="https://www.kensho.com/careers">are hiring</a>, and in my previous life I was a pure mathematician.  When my parents ask me what the "pure" in "pure mathematics" means, I tell them that I did not use a computer.  Since then I have been using a computer pretty constantly, and hopefully in this talk you will see some sort of mix between that theory and practice.
+    </td>
+</tr>
+
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.002.png">
+        <img src="images/thumbs/bayes_talk.002.png">
+      </a>
+    </td>
+
+    <td>
+      <p>Today I am talking about doing Bayesian inference using Python.  It is a wonderful language to work in, it is expressive and beautiful, but at the same time, allows us to call out to more powerful languages for speed.  More importantly, but certainly related, there is a rich ecosystem of libraries for Python that we can use and build on top of.
+
+      <p>I will actually be using a small library I built wrapping <a href="https://github.com/pymc-devs/pymc3"><code>PyMC3</code></a> called <a href="https://github.com/ColCarroll/sampled"><code>sampled</code></a>.  I built this in response to <a href="http://andrewgelman.com/2017/05/31/compare-stan-pymc3-edward-hello-world/">a blog post</a> from one of the authors of Stan, Bob Carpenter, where he compared a Bayesian approach to linear regression in three popular probabilistic programming languages: <a href="http://mc-stan.org/">Stan</a>, PyMC3, and <a href="http://edwardlib.org/">Edward</a>. The implementation in PyMC3 looked too ugly to me, so I went out to fix it.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.003.png">
+        <img src="images/thumbs/bayes_talk.003.png">
+      </a>
+    </td>
+
+    <td>
+      <p>As a brief diversion into open source, this is a beautiful thing: if a library does not do what you want, you can often fix it and share it back with the maintainers.  Or, if you just want to be able to install your doubtless brilliant work on any computer, there is free infrastructure out there to help you share what you built back with the world.
+
+      <p>As an example of the latter, I will emphasize here that <code>sampled</code> is a full 17 lines of code, but it still gets <a href="https://pypi.org/project/sampled/">this beautiful page</a> on the (new!) Python package index.  There are machines that <a href="https://travis-ci.org/">TravisCI</a> let open source projects use to run their tests, and other machines that <a href="https://coveralls.io/">Coveralls.io</a> donates to collect and display test coverage data.
+
+      <p>As an example of the former, I got involved with PyMC3 <a href="https://github.com/pymc-devs/pymc3/pull/1290">about a year ago</a> when I got annoyed by their test suite during my long train commute.  You know it gets when <a href="https://xkcd.com/386/">someone is wrong on the internet</a>.  Since then, I have used working on the library as an excuse to learn more about Bayesian inference.  I think it is a welcoming community, we are always looking for new contributors, and I am happy to talk more about getting involved in open source.  I know I was interested for a long time, but it is difficult to know how to make the first step.  We even have stickers!
+     </td>
+</tr>
+
+<tr>
+  <td colspan="2">
+
+    <div style="display: inline-block">
+      <a name="regression" class=toc href="#regression">
+        <img src="images/PyMC3.png" class=logo style="float: left"></img>
+        <h1 style="float: right;">Bayesian Linear Regression</h1>
+      </a>
+    </div>
+    <hr/>
+  </td>
+
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.004.png">
+        <img src="images/thumbs/bayes_talk.004.png">
+      </a>
+    </td>
+
+    <td>
+      <p>As an example of the expressiveness of Python, and a review of how Bayesian inference might be useful, consider this definition of <a href="https://en.wikipedia.org/wiki/Bayesian_linear_regression#Model_setup">Bayesian linear regression from Wikipedia</a>.  We are supposing we get a matrix of observations <em>X</em>, a vector of labels <em>y</em>, and we’ll try to recover the weights <em>ß</em> and noise <em>σ</em>.  This being a Bayesian treatment, we will expect to get a(n estimate for the) full posterior distribution for these variables.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.005.png">
+        <img src="images/thumbs/bayes_talk.005.png">
+      </a>
+    </td>
+
+    <td>
+      <p>Here is the exact same model written using <code>PyMC3</code> and <code>sampled</code>.  All of these distributions - <code>Normal</code>, <code>HalfNormal</code>, <code>Flat</code> - are defined in <code>PyMC3</code>.  The <code>@sampled</code> at the top is a <a href="https://stackoverflow.com/questions/739654/how-to-make-a-chain-of-function-decorators/1594484#1594484">decorator</a> from my library.  Notice that this model specification looks very similar to how you would write this down on a piece of paper.  There is actually <a href="https://github.com/pymc-devs/pymc3/pull/2201">a really neat pull request</a> recently so that if you print these in the terminal, it will format them using LaTeX.  I do have to give the model some hints as to the shape of the data, but that is just because it is easy to do and difficult to infer.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.006.png">
+        <img src="images/thumbs/bayes_talk.006.png">
+      </a>
+    </td>
+
+    <td>
+      <p>How do we use this model?  We can give it some artificially generated data and let PyMC3 sample from the posterior.  This is done in the <code>sample</code> function call.  Thomas Wiecki, one of the core developers, wrote a blog post describing this as <a href="http://twiecki.github.io/blog/2013/09/12/bayesian-glms-1/">The Inference Button</a>&trade; because you do not need to worry about how points are sampled: the library will automatically choose sensible defaults.  Happily, the rest of this talk will be about how <code>sample</code> actually samples.
+
+      <p>Note that the context manager <code>linear_regression</code> was made in the previous slide.  This is all that <code>sampled</code> does: we can write a model as a function, which it turns into a <a href="https://jeffknupp.com/blog/2016/03/07/python-with-context-managers/">context manager</a> (PyMC3 uses context managers to attach variables to models).  You can then pass different models and parameters into the same model when you are ready to sample a posterior.  We will see more of that later.  Now though, what can we see in the posterior?
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.007.png">
+        <img src="images/thumbs/bayes_talk.007.png">
+      </a>
+    </td>
+
+    <td>
+      <p>Here is a plot of 500 points from the posterior distribution of the noise variable <em>σ</em>.  The true value is marked with the solid line, and you can see I added quite a bit of noise for this model.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.008.png">
+        <img src="images/thumbs/bayes_talk.008.png">
+      </a>
+    </td>
+
+    <td>
+      <p>These are the posteriors of the weights <em>ß</em> that were sampled.  You can inspect either the plot or the actual traces and confirm a really calming fact: math works, which is great:  the maximum of each of these distributions is quite close to the maximum likelihood estimator you would get from minimizing least squares, or fitting this data with scikit-learn.
+
+        <p>This continues to impress me, that this apparently very different algorithm from statistics can recover the same point estimate as linear algebra or calculus would.  It is like a math trifecta.
+
+      <p>Notice that the maximum likelihood is not exactly the values we used to generate this data, but by using this approach, we may quantify how surprised we are at the true values.
+     </td>
+</tr>
+
+<tr>
+  <td colspan="2">
+    <div style="display: inline-block">
+      <a name="calculus" class=toc href="#calculus">
+        <img src="images/PyMC3.png" class=logo style="float: left"></img>
+        <h1 style="float: right;">Sampling with Calculus</h1>
+      </a>
+    </div>
+    <hr/>
+  </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.009.png">
+        <img src="images/thumbs/bayes_talk.009.png">
+      </a>
+    </td>
+
+    <td>
+      <p>How does this sampling actually work?  I am going to follow the approach from Christopher Bishop’s book <em>Pattern Recognition and Machine Learning</em>, as well as borrow quite a bit from Michael Betancourt, particularly when discussing Hamiltonian Monte Carlo.  There are links to sources at the end of the talk.
+
+      <p>As a brief review, a probability density function is a way of assigning probability to an event.  In the case of discrete events, this is quite intuitive, and a often a question in combinatorics involving urns, dice, birthdays, and marbles.  In grad school I studied measure theory, and in the language of that field, a pdf assigns measures to sets.
+
+      <p>In general, a measure - and hence, a pdf - only makes sense under an integral sign.  So to emphasize a point we will return to, we care about sampling from probability density functions because we care about calculating expectations.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.010.png">
+        <img src="images/thumbs/bayes_talk.010.png">
+      </a>
+    </td>
+
+    <td>
+      <p>As a first, fairly classical approach to this problem, we suppose we are able to generate uniform random samples.  How that happens is beyond the scope of the talk, but we will trust the <code>random</code> functions provided by almost all software.
+
+      <p>We also suppose we have a pdf <em>π</em>, which we can evaluate at points: think of the Gaussian where it is easy enough to write down the function.  More generally, and we might think of <em>π</em> as being the posterior of some big joint probability distribution in the presence of data.  Evaluating the posterior distribution at points is still easy because of Bayes’ Theorem.
+
+      <p>The goal is to generate samples distributed according to <em>π</em> using only our uniform random number generator and this knowledge of the pdf.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.011.png">
+        <img src="images/thumbs/bayes_talk.011.png">
+      </a>
+    </td>
+
+    <td>
+      <p>A natural way to do this is to invert the cumulative density function.  Here we have the pdf for the exponential distribution, and have plotted the cdf.  When we draw 0.75 from our uniform distribution on the <em>y</em>-axis, we will walk out horizontally until we meet the cdf, then see the <em>x</em> value that corresponds to — here, something like 1.4
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.012.png">
+        <img src="images/thumbs/bayes_talk.012.png">
+      </a>
+    </td>
+
+    <td>
+      <p>Here is what we just did analytically.  Just let your eyes soak that in. Somewhere in there, we are evaluating an indefinite integral, and then inverting it with respect to one of its limits.  For the exponential distribution, this is tractable, so we may sample from that distribution nearly as fast as we sample from the uniform distribution.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.013.png">
+        <img src="images/thumbs/bayes_talk.013.png">
+      </a>
+    </td>
+
+    <td>
+      <p>However, in general, integrating is difficult.  The Gaussian pdf is famously non-elementary.  There happens to be a trick for generating two i.i.d. normal numbers from two uniformly distributed random numbers, but it is untenable to expect integration to work all, or even most of the time.
+
+      <p>However, note that we now have some distributions that we are able to sample from besides the uniform one.  In particular, you should expect “named” distributions will have a fast sampling method.  Our goal then is to sample from more complicated distributions, where it is not reasonable to hand craft an integration scheme whenever the model changes.
+    </td>
+</tr>
+
+<tr>
+  <td colspan="2">
+    <div style="display: inline-block">
+      <a name="rejection" class=toc href="#rejection">
+        <img src="images/PyMC3.png" class=logo style="float: left"></img>
+        <h1 style="float: right;">Rejection Sampling</h1>
+      </a>
+    </div>
+    <hr/>
+  </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.014.png">
+        <img src="images/thumbs/bayes_talk.014.png">
+      </a>
+    </td>
+
+    <td>
+      <p>In light of this desire for a more general way of evaluating integrals, let us re-examine our strategy.   We are interested in computing expectations, and to do so, we will pass from considering a continuous integral to an approximation of it using discrete samples.
+
+      <p>Specifically, we will sample a sequence of variables <em>z<sup>(j)</sup></em> from our target distribution <em>π</em>, and average the value of the function over those points to compute our expectations.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.015.png">
+        <img src="images/thumbs/bayes_talk.015.png">
+      </a>
+    </td>
+
+    <td>
+      <p>Our first attempt at a general approach is called rejection sampling.  The algorithm is simple, but the picture of what is going on is even simpler.  We choose a known distribution <em>p</em> and scale it so it is always larger than the distribution of interest, <em>π</em>.  Here we have chosen a scaled normal distribution.  We sample repeatedly and uniformly from underneath <em>p</em>, and accept any samples that are also under our unknown distribution.  This sampling is in two steps:  first we get a sample along the <em>x</em>-axis from <em>p</em>, then a uniform sample between 0 and <em>p(x)</em>, which we compare to <em>π(x)</em>. It is not hard to show that the green points end up being independent samples from <em>π</em>.
+
+      <p>The red points are the computational cost we pay to do rejection sampling:  the closer our proposal distribution matches our unknown distribution, the less computationally expensive generating random samples is.  But that is also one of the problems with rejection sampling.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.016.png">
+        <img src="images/thumbs/bayes_talk.016.png">
+      </a>
+    </td>
+
+    <td>
+      <p>Intuitively, we are sampling from a uniform distribution underneath one curve in order to measure the area under another curve.  This known distribution <em>p</em> has to be bigger everywhere than the unknown distribution, but we are not even using the fact that the it is a probability density function here, only that we can sample from it.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.017.png">
+        <img src="images/thumbs/bayes_talk.017.png">
+      </a>
+    </td>
+
+    <td>
+      <p>A problem with rejection sampling is that it is still not really “general”, in that we must design a proposal distribution that dominates our unknown distribution.  The worse our proposal, the more computational time we are wasting as we reject more samples.  In higher dimensions, this problem is compounded.
+
+      <p>To understand this, consider a common method of approximating the area of a unit ciricle by sampling points from the square with side length 2, and accepting those samples that are within the circle.  Note that this is secretly approximating the uniform distribution on the unit circle using rejection sampling.
+
+      <p>This will converge, if a little slowly.  In a few seconds my laptop had a passable approximation for <em>π</em> (the constant, not the distribution).
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.018.png">
+        <img src="images/thumbs/bayes_talk.018.png">
+      </a>
+    </td>
+
+    <td>
+      <p>But suppose now we wanted to sample the unit <em>n</em>-sphere, and use the enclosing hypercube as the proposal “distribution”.  In <em>n</em>-dimensions, this cube has volume 2<sup><em>n</em></sup>, while the volume of a hypersphere converges to zero.  This is an unintuitive fact, that all of the volume in a high dimensional cube is in the corners, that should also serve as a warning that our geometric hunches may not be accurate in high dimensions.
+
+      <p>I did not actually believe the math here was as bad as all that, and tried this with numpy.  In a recurring theme today, math works, and in ten million samples from a twenty dimensional cube, none of them were inside the unit hypersphere.
+   </td>
+</tr>
+
+<tr>
+  <td colspan="2">
+    <div style="display: inline-block">
+      <a name="metropolis" class=toc href="#metropolis">
+        <img src="images/PyMC3.png" class=logo style="float: left"></img>
+        <h1 style="float: right;">Metropolis-Hastings Sampling</h1>
+      </a>
+    </div>
+    <hr/>
+  </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.019.png">
+        <img src="images/thumbs/bayes_talk.019.png">
+      </a>
+    </td>
+
+    <td>
+      <p>There are various partial fixes to rejection sampling, and you can actually sample pretty effectively by hand-tuning a proposal distribution, but it seems hopeless to build an efficient “inference button” this way.  In searching for a general sampling method, we turn to Markov Chain Monte Carlo.  A Markov chain is a discrete process where each step has knowledge of the previous step.
+
+      <p>Markov chains are useful in sampling because, in distributions of interest, regions of high probability tend to “clump”, so once your chain finds a region of high density, it should stay in a region of high density.  We will discuss this more later in the context of “concentration of measure”.
+   </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="http://i.giphy.com/wCY3Zy36OHpwk.gif">
+        <img src="images/thumbs/bayes_talk.020.png">
+      </a>
+    </td>
+
+    <td>
+      <p>This is my dog Pete, exhibiting how a Markov chain might explore a region of high scent density (<a href="http://i.giphy.com/wCY3Zy36OHpwk.gif">click through for gif</a>).  He wanders off briefly in the middle, but then goes back to the good stuff.  This is roughly how Metropolis-Hastings works.  If he was good at following scents, I might have another video of him demonstrating Hamiltonian Monte Carlo, but he does not want to go too far from the good stuff.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/metropolis.gif">
+        <img src="images/metropolis.gif">
+      </a>
+    </td>
+
+    <td>
+      <p>This is a cartoon of how Metropolis Hastings sampling works.  Suppose we have a two dimensional probability distribution, where the pdf is like a donut:  there is a ring of high likelihood at radius 1, and it decays like a Gaussian around that.
+
+      <p>Metropolis-Hastings is a two step process of making proposals, and then deciding whether or not to accept that proposal.  When we reject a proposal, we add the current point back to our samples again.  This acceptance step does the mathematical bookkeeping to make sure that, in the limit, we are sampling from the correct distribution.
+
+      <p>Notice this is a Markov chain, because our proposal will depend on our current position, but not on our whole history.
+   </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.022.png">
+        <img src="images/thumbs/bayes_talk.022.png">
+      </a>
+    </td>
+
+    <td>
+      <p>For more rigorous approach, we can look at the actual algorithm.  You can see the two steps here: first, propose a point, then accept or reject that point.  This acceptance step makes those two steps work together just right and we will actually be sampling from π in the limit.
+
+      <p>We will again start with a proposal distribution, but this time it is conditioned on the current point, and suggests a place to move to.  A common choice is a normal distribution, centered at your current point with some fixed step size.  We then accept or reject that choice, based on the probability at the proposed point.  Either way we get a new sample every iteration, though it is problematic if you have too many rejections or too many acceptances.
+
+      <p>There are some technical concerns when choosing your proposal, and the acceptance here is only for symmetric proposal distributions, though the more general rule is also very simple.  But this is it, and this is a big selling point of Metropolis-Hastings:  it is easy to implement, inspect, and reason about.
+
+      <p>Another thing to reflect on with this algorithm is that our samples will be correlated, in proportion to our step size.
+
+      <p>But I want to really emphasize that this bookkeeping is just beautiful in that it is the exact right thing to make sure our samples come from the correct distribution in the limit.  This is a theorem with a fairly simple proof - see <a href="https://en.wikipedia.org/wiki/Detailed_balance#Reversible_Markov_chains">detailed balance</a>.  There are cases where the convergence is truly only at infinity, which continues to be difficult to automatically diagnose, but if we are using MCMC, we are no longer worried about if samples will converge, only when samples will converge.
+   </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.023.png">
+        <img src="images/thumbs/bayes_talk.023.png">
+      </a>
+    </td>
+
+    <td>
+      <p>In fact, the central limit theorem for MCMC says that the sampled expectation will be normally distributed around the true expectation.  ESS here is the "<a href="https://en.wikipedia.org/wiki/Effective_sample_size">effective sample</a> size".  In the best case, the effective sample size is the number of samples, meaning each decimal place of accuracy will require one hundred times the number of samples.  However, more correlated samples means a lower effective sample size, meaning more noise in our estimates.  So you might have 1,000,000 samples, but the ESS is still only 10 because the draws are so correlated.
+
+      <p>This is something often reported in the PyMC3 issues, which is also a UI problem:  we have a beautiful progress bar for sampling that tells you exactly how many samples you get per second, and this makes it obvious that Metropolis-Hastings gets far more iterations per second than more state of the art sampling methods.  This is because iterations per second can be a poor proxy for the effective sample size, which is what is important.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.024.png">
+        <img src="images/thumbs/bayes_talk.024.png">
+      </a>
+    </td>
+
+    <td>
+      <p>Here though is a full implementation of Metropolis-Hastings in Python.  Notice there are a few knobs to turn, like the step size, the proposal distribution, and the initial point.  There is <a href="http://www.sciencedirect.com/science/article/pii/S0304414907002177">some research that says 0.234 is the optimal acceptance rate</a> for certain classes of distributions.  By making the step size smaller, you can increase your acceptance rate by staying close to regions of high probability.  Conversely, you can increase the step size, and make bolder proposals that get rejected more often.  The price you pay in either direction is that your Markov chain will not explore space as quickly, and your samples will be correlated.
+
+      <p>For an initial point, Michael Betancourt makes a wonderful case for not using the maximum likelihood estimator:  if you have a survey with 50 questions, no one will look like the average response to all those questions.  You might prefer to use one of the people in your survey as a “representative sample”.
+
+      <p>PyMC3 will use a “tuning” period to automatically set both the initial points and the step size, optionally discarding those samples (when we change the proposal distribution, we lose our theoretical convergence guarantees).
+   </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.025.png">
+        <img src="images/thumbs/bayes_talk.025.png">
+      </a>
+    </td>
+
+    <td>
+      <p>Here are 1,000 samples I took using the previous function from a “donut” distribution.  The pdf is normally distributed about the unit circle, with standard deviation 0.1.  There is some transparency to the points, and the darker ones are places where there were rejections before making the next jump.  The actual acceptance rate of these samples was around the optimal rate.
+   </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.027.png">
+        <img src="images/thumbs/bayes_talk.027.png">
+      </a>
+    </td>
+
+    <td>
+      <p>However, high dimensions plague Metropolis-Hastings too.  We are constantly looking for the right step size that is big enough to explore the space, but small enough to not get rejected overly much.  High dimensions has tons of space, and it gets harder and harder to stay in a region of high probability while also exploring the whole distribution at a reasonable rate.
+   </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.028.png">
+        <img src="images/thumbs/bayes_talk.028.png">
+      </a>
+    </td>
+
+    <td>
+      <p>This is a plot of the average radius of points drawn from multivariate Gaussians in increasing dimensions.  Notice how the points start to concentrate in a band — blue is one dimension, green is two, and so on.  In this case you can imagine yellow represents a 6 dimensional “shell” that is distance 1 away from the origin, and this is common in high dimensions:  in a rigorous way, <a href="https://en.wikipedia.org/wiki/Concentration_of_measure">there will be an exponentially small area where a pdf is big</a>.
+
+      <p>This is problematic because no matter how well we tune Metropolis-Hastings, it will be too computationally expensive to explore the entire probability distribution.  It is a fine choice for low dimensions, but once your model has more than a few dimensions, convergence may be quite bad.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.029.png">
+        <img src="images/thumbs/bayes_talk.029.png">
+      </a>
+    </td>
+
+    <td>
+      <p>You can actually see this in low dimensions  by making the derivative of the pdf large.  Here are samples from the donut distribution again, but instead of having a standard deviation of 0.1, we use a standard deviation of 0.01.  You can see that 1000 samples was not nearly enough to explore the entire probability distribution, and any expectations we compute with this sample will be biased.
+     </td>
+</tr>
+
+<tr>
+  <td colspan="2">
+    <div style="display: inline-block">
+      <a name="hamiltonian" class=toc href="#hamiltonian">
+        <img src="images/PyMC3.png" class=logo style="float: left"></img>
+        <h1 style="float: right;">Hamiltonian Monte Carlo</h1>
+      </a>
+    </div>
+    <hr/>
+  </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.030.png">
+        <img src="images/thumbs/bayes_talk.030.png">
+      </a>
+    </td>
+
+    <td>
+      <p>These ideas inspired an approach from physics, though, to use gradient information to travel through this typical set to distant regions.  Michael Betancourt has a wonderful talk on the physics of this <a href="https://www.youtube.com/watch?v=VnNdhsm0rJQ">you can see online</a> or when he comes to town.  Intuitively, we are going to put our current position into orbit, using the probability distribution as a gravitational field.
+
+      <p>So, instead of just sampling points in <em>n</em> dimensions, we will sample both points and momentum, in <em>2n</em> dimensions.  So we run out of dimensions awful quickly if we want to visualize this.  Here, I am sampling a 1-dimensional normal distribution, which is on the <em>x</em>-axis, and choosing the momentum distribution to also be normal, which you can see on the <em>y</em>-axis.
+
+      <p>At each step, I sample from the momentum, evolve the system according to Hamilton’s equations, which we will discuss, for a while, then project back to the <em>x</em>-axis to get my sample.  We repeat this to sample from our distribution.  Each of the colored lines in the plot is one of these Hamiltonian paths.
+   </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.031.png">
+        <img src="images/thumbs/bayes_talk.031.png">
+      </a>
+    </td>
+
+    <td>
+      <p>Here are 1,000 draws from the donut distribution we saw earlier, drawn with PyMC3 using a Hamiltonian sampler.  Notice that we never resample the same point multiple times, so the samples are a little more diffuse.  I’ll note that this took about twenty times as long as the Metropolis samples earlier.
+   </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.032.png">
+        <img src="images/thumbs/bayes_talk.032.png">
+      </a>
+    </td>
+
+    <td>
+      <p>You can also see that HMC does fine with the skinnier donut.  Intuitively, HMC is using gradient information to move through the pdf, which allows it to sample so efficiently.  These samples were another ten times slower than the previous draws.
+   </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.033.png">
+        <img src="images/thumbs/bayes_talk.033.png">
+      </a>
+    </td>
+
+    <td>
+      <p>So what is going on mathematically?  As I mentioned, we lift our position <em>q</em> to add some momentum <em>p</em>.  This also lifts our pdf into a joint density function.  We can factor this joint pdf so that when we marginalize the momentum, we are back to the desired distribution.  This corresponds to the projection to the <em>x</em>-axis earlier.  Notice also that we are stuck with <em>π(q)</em>, but get to choose the conditional probability for the momentum.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.034.png">
+        <img src="images/thumbs/bayes_talk.034.png">
+      </a>
+    </td>
+
+    <td>
+      <p>The Hamiltonian equations use an analogy to physics — if we have an electric or gravitational field and wish to move a particle through that field while conserving energy, how do the position and momentum change?  We work in a log space, and so our probability distribution decomposes in this metaphor into a sum of kinetic energy, depending on position and momentum, and potential energy, which only depends on the position.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.035.png">
+        <img src="images/thumbs/bayes_talk.035.png">
+      </a>
+    </td>
+
+    <td>
+      <p>These are Hamilton’s equations.  They let us know how to evolve the position and momentum.  Once again, there is some mathematical bookkeeping I will not show, but every proposal made by integrating along these paths will be accepted, and we can integrate for arbitrarily long times to explore the different parts of the distribution.  The current state of the art method in PyMC3 uses a <a href="https://arxiv.org/abs/1111.4246">“No-U-Turn” sampler</a> that provides a rule for how long to follow a Hamiltonian path.  Michael Betancourt has <a href="https://arxiv.org/abs/1601.00225">recently put that rule onto more solid theoretical footing</a>, and there is a <a href="https://summerofcode2017.wordpress.com/">Google Summer of Code project</a> working at using some of Betancourt’s ideas to achieve a more optimal stopping time in PyMC3.
+     </td>
+</tr>
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.037.png">
+        <img src="images/thumbs/bayes_talk.037.png">
+      </a>
+    </td>
+
+    <td>
+      <p>There are still plenty of problems, and we are still experimenting!  A year ago, cutting edge for the library was its implementation of the No-U-Turn sampler, which was three years old at the time.  Currently, there are at least three algorithms published in the past year which are under current development (<a href="https://github.com/pymc-devs/pymc3/pull/1694">OPVI</a>, <a href="https://github.com/pymc-devs/pymc3/issues/1958">SGHMC</a>, <a href="https://github.com/pymc-devs/pymc3/pull/1923">SMC</a>).
+
+      <p>As mentioned, Metropolis-Hastings is still commonly used in practice, partly because it has so few knobs.  PyMC3 will automatically use a reasonably tuned Hamiltonian sampler, but there are still plenty of places where this runs into trouble.
+
+      <p>The goal of a library like PyMC3 is to allow a researcher to design a model, then sample from it.  The more parameters we can set automatically and optimally, the more useful the library will be.  In cases where it cannot do this, we try to <a href="https://github.com/pymc-devs/pymc3/pull/2002">warn the user specifically of the problem and possible solutions</a>.
+   </td>
+</tr>
+
+<tr>
+  <td colspan="2">
+    <div style="display: inline-block">
+      <a name="references" class=toc href="#references">
+        <img src="images/PyMC3.png" class=logo style="float: left"></img>
+        <h1 style="float: right;">References</h1>
+      </a>
+    </div>
+    <hr/>
+  </td>
+</tr>
+
+
+<tr>
+    <td>
+      <a href="images/bayes_talk.038.png">
+        <img src="images/thumbs/bayes_talk.038.png">
+      </a>
+    </td>
+
+    <td>
+        <h3>Learn More</h3>
+        <ul>
+          <li>Betancourt, M. (2016, January 2). <a href="https://arxiv.org/abs/1601.00225">Identifying the Optimal Integration Time in Hamiltonian Monte Carlo.</a> arXiv.org.</li>
+          <li>Betancourt, M. (2017, January 9). <a href="https://arxiv.org/abs/1701.02434">A Conceptual Introduction to Hamiltonian Monte Carlo.</a> arXiv.org.</li>
+          <li>Bishop, Christopher M. "Pattern recognition and Machine Learning” (2006)</li>
+          <li>Hoffman, Matthew D., and Andrew Gelman. <a href="http://www.jmlr.org/papers/volume15/hoffman14a/hoffman14a.pdf">"The No-U-turn sampler: adaptively setting path lengths in Hamiltonian Monte Carlo."</a> Journal of Machine Learning Research 15.1 (2014): 1593-1623.</li>
+          <li>Salvatier J, Wiecki TV, Fonnesbeck C. (2016) <a href="https://doi.org/10.7717/peerj-cs.55">Probabilistic programming in Python using PyMC3.</a> PeerJ Computer Science 2:e55 </li>
+        </ul>
+        <h3>PyMC3</h3>
+        <ul>
+          <li><a href="https://github.com/pymc-devs/pymc3">Code on GitHub</a></li>
+          <li><a href="http://pymc-devs.github.io/pymc3/">Documentation and examples</a></li>
+          <li><a href="https://discourse.pymc.io/">Discourse Forum</a></li>
+        </ul>
+   </td>
+</tr>
+
+</table>
+
+</div>
+
+</body>
+</html>
