@@ -52,7 +52,7 @@
 
 <p>These are the slides and lightly edited, modestly annotated speaker notes from a talk given at the <a href="https://www.meetup.com/Boston-Bayesians/events/240254660/">Boston Bayesians meetup</a> on June 15, 2017. Apologies to <a href="http://idlewords.com/talks/">Maciej Cegłowski</a> for ripping off the formatting of this essay.
 
-<p>There are a number of code snippets, figures, and demos that are in the talk.  They are available to view in <a href="https://github.com/ColCarroll/hamiltonian_monte_carlo_talk/blob/master/demos.ipynb">the github repo</a>. If you would like to run the code, you should have <a href="http://jupyter.org/"><code>jupyter</code></a> installed, and run:
+<p>There are a number of code snippets, figures, and demos that are in the talk.  They are available <a href="https://nbviewer.jupyter.org/github/ColCarroll/hamiltonian_monte_carlo_talk/blob/master/demos.ipynb">to view</a> or to download from <a href="https://github.com/ColCarroll/hamiltonian_monte_carlo_talk">the github repo</a>. If you would like to run the code, you should have <a href="http://jupyter.org/">jupyter</a>, and install the talk code with:
   <ol>
     <li><code>git clone git@github.com:ColCarroll/hamiltonian_monte_carlo_talk.git</code></li>
     <li><code>cd hamiltonian_monte_carlo_talk</code></li>
@@ -105,7 +105,7 @@
     <td>
       <p>Today I am talking about doing Bayesian inference using Python.  It is a wonderful language to work in, it is expressive and beautiful, but at the same time, allows us to call out to more powerful languages for speed.  More importantly, but certainly related, there is a rich ecosystem of libraries for Python that we can use and build on top of.
 
-      <p>I will actually be using a small library I built wrapping <a href="https://github.com/pymc-devs/pymc3"><code>PyMC3</code></a> called <a href="https://github.com/ColCarroll/sampled"><code>sampled</code></a>.  I built this in response to <a href="http://andrewgelman.com/2017/05/31/compare-stan-pymc3-edward-hello-world/">a blog post</a> from one of the authors of Stan, Bob Carpenter, where he compared a Bayesian approach to linear regression in three popular probabilistic programming languages: <a href="http://mc-stan.org/">Stan</a>, PyMC3, and <a href="http://edwardlib.org/">Edward</a>. The implementation in PyMC3 looked too ugly to me, so I went out to fix it.
+      <p>I will actually be using a small library I built wrapping <a href="https://github.com/pymc-devs/pymc3">PyMC3</a> called <a href="https://github.com/ColCarroll/sampled"><code>sampled</code></a>.  I built this in response to <a href="http://andrewgelman.com/2017/05/31/compare-stan-pymc3-edward-hello-world/">a blog post</a> from one of the authors of Stan, Bob Carpenter, where he compared a Bayesian approach to linear regression in three popular probabilistic programming languages: <a href="http://mc-stan.org/">Stan</a>, PyMC3, and <a href="http://edwardlib.org/">Edward</a>. The implementation in PyMC3 looked too ugly to me, so I went out to fix it.
      </td>
 </tr>
 
@@ -159,7 +159,7 @@
     </td>
 
     <td>
-      <p>Here is the exact same model written using <code>PyMC3</code> and <code>sampled</code>.  All of these distributions - <code>Normal</code>, <code>HalfNormal</code>, <code>Flat</code> - are defined in <code>PyMC3</code>.  The <code>@sampled</code> at the top is a <a href="https://stackoverflow.com/questions/739654/how-to-make-a-chain-of-function-decorators/1594484#1594484">decorator</a> from my library.  Notice that this model specification looks very similar to how you would write this down on a piece of paper.  There is actually <a href="https://github.com/pymc-devs/pymc3/pull/2201">a really neat pull request</a> recently so that if you print these in the terminal, it will format them using LaTeX.  I do have to give the model some hints as to the shape of the data, but that is just because it is easy to do and difficult to infer.
+      <p>Here is the exact same model written using PyMC3 and <code>sampled</code>.  All of these distributions - <code>Normal</code>, <code>HalfNormal</code>, <code>Flat</code> - are defined in PyMC3.  The <code>@sampled</code> at the top is a <a href="https://stackoverflow.com/questions/739654/how-to-make-a-chain-of-function-decorators/1594484#1594484">decorator</a> from my library.  Notice that this model specification looks very similar to how you would write this down on a piece of paper.  There is actually <a href="https://github.com/pymc-devs/pymc3/pull/2201">a really neat pull request</a> recently so that if you print these in the terminal, it will format them using LaTeX.  I do have to give the model some hints as to the shape of the data, but that is just because it is easy to do and difficult to infer.
      </td>
 </tr>
 
